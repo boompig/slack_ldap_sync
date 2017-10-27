@@ -136,6 +136,7 @@ def slack_message_owners(message, owners):
 
 
 def disable_slack_user(slack_id, slack_email, reason, owners):
+  # NOTE: this uses the scim api
   url = '%s/scim/v1/Users/%s' % (slack_api_host, slack_id)
   http_response = requests.delete(url, headers=slack_http_header)
   http_response.raise_for_status()
@@ -177,7 +178,17 @@ def sync_slack_ldap():
 
   # After the failsafe is over, go through and delete all the users who should be deleted.
   for slack_email, value in slack_users_to_be_deleted.iteritems():
-    disable_slack_user(slack_id=value['slack_id'], slack_email=slack_email, reason=value['reason'], owners=all_slack_owners)
+    if use_scim_api:
+      disable_slack_user(slack_id=value['slack_id'], slack_email=slack_email, reason=value['reason'], owners=all_slack_owners)
+    else:
+      notify_admin_invalid_user(slack_id=value['slack_id'], slack_email=slack_email, reason=value['reason'], owners=all_slack_owners)
+
+
+def notify_admin_invalid_user(slack_id, slack_email, reason, owners):
+  log_msg = 'slack_id: {}. email: {}. This user is invalid because {}! Since SCIM APIs are not available, you have to disable them manually.'.format(
+      slack_id, slack_email, reason)
+  logger.info(log_msg)
+  slack_message_owners(message=log_msg, owners=owners)
 
 
 if __name__ == '__main__':
