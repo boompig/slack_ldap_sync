@@ -21,6 +21,7 @@ slack_api_host      = 'https://api.slack.com'
 slack_subdomain     = os.environ.get('SLACK_SUBDOMAIN')  # eg. https://foobar.slack.com
 slack_http_header   = {'content-type': 'application/json', 'Authorization': slack_scim_token}
 slack_icon_emoji    = os.environ.get('SLACK_ICON_EMOJI', ':scream_cat:')
+use_scim_api        = os.environ.get('USE_SCIM_API', 'True') == 'True'
 # 'ldaps://ad.example.com:636', make sure you always use ldaps
 ad_url              = os.environ.get('AD_URL')
 ad_basedn           = os.environ.get('AD_BASEDN')
@@ -36,12 +37,21 @@ searchreq_attrlist  = json.loads(os.environ.get('AD_SEARCHREQ_ATTRLIST'))
 sync_run_interval   = float(os.environ.get('SLACK_SYNC_RUN_INTERVAL', '3600'))
 
 
-def get_all_slack_users():
+def get_all_slack_users_scim():
   url = '%s/scim/v1/Users?count=999999' % slack_api_host
   http_response = requests.get(url=url, headers=slack_http_header)
   http_response.raise_for_status()
   results = http_response.json()
   return results['Resources']
+
+
+def get_all_slack_users():
+  url = '{base_url}/api/users.list?token={token}&limit=9999&presence=false&include_locale=false'.format(
+    base_url=slack_api_host, token=slack_token)
+  http_response = requests.get(url=url)
+  http_response.raise_for_status()
+  results = http_response.json()
+  return results['members']
 
 
 def get_all_active_ad_users():
@@ -139,7 +149,10 @@ def sync_slack_ldap():
   logger.info('Looking for slack users to delete that do not exist or are not active in corp LDAP')
   guest_users               = get_guest_users()
   all_slack_owners          = get_owner_users()
-  all_slack_users           = get_all_slack_users()
+  if use_scim_api:
+    all_slack_users = get_all_slack_users_scim()
+  else:
+    all_slack_users           = get_all_slack_users()
   all_ad_users              = get_all_active_ad_users()
   slack_users_to_be_deleted = {}
 
